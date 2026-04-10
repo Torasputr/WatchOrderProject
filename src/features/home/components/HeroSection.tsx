@@ -3,14 +3,17 @@ import { StatTile } from "./StatTile";
 
 export default function HeroSection() {
   return (
-    <section className="min-h-screen grid items-center bg-linear-to-b from-[#0b0f13] to-[#080b0d] text-zinc-50 px-10 py-16">
-      <div className="mx-auto max-w-7xl grid grid-cols-[0.85fr_1.15fr] items-center gap-30">
+    <section
+      id="hero"
+      className="kr-theme-clash flex flex-1 flex-col justify-center px-10 py-8 text-[var(--kr-text-primary)]"
+    >
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-[0.85fr_1.15fr] items-center gap-30">
         <div>
-          <p className="text-xs font-bold text-emerald-500 tracking-widest">
+          <p className="text-xs font-bold text-[var(--kr-accent-primary)] tracking-widest">
             KAMEN RIDER ARCHIVE
           </p>
           <h1 className="text-4xl font-bold">Kamen Rider Watch Order</h1>
-          <h2 className="mt-4 text-zinc-400 text-sm max-w-md">
+          <h2 className="mt-4 text-[var(--kr-text-muted)] text-sm max-w-md">
             Start from the main series, then expand to the movies, crossovers,
             and specials.
           </h2>
@@ -20,7 +23,7 @@ export default function HeroSection() {
         </div>
 
         <div>
-          <div className="rounded-2xl border border-zinc-800 p-4 bg-linear-to-b from-[#10171D] to-[#0b1116] shadow-[0_0_24px_rgba(16,185,129,0.18)]">
+          <div className="rounded-2xl border border-[var(--kr-border)] p-4 bg-linear-to-b from-[var(--kr-panel-from)] to-[var(--kr-panel-to)] shadow-[0_0_24px_var(--kr-glow-primary)]">
             <StatTile
               label="Total"
               value={100}
@@ -43,7 +46,7 @@ export default function HeroSection() {
                 emphasis="accentEnd"
               />
             </div>
-            <p className="mt-3 px-1 text-[0.76rem] leading-snug text-zinc-500">
+            <p className="mt-3 px-1 text-[0.76rem] leading-snug text-[var(--kr-text-muted)]">
               Statistics follows the amount of main Kamen Rider series
               only.{" "}
             </p>

@@ -1,1 +1,75 @@
 @import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+:root {
+  --kr-bg-from: #0b0f13;
+  --kr-bg-to: #080b0d;
+  --kr-panel-from: #10171d;
+  --kr-panel-to: #0b1116;
+  --kr-text-primary: #f4f7fa;
+  --kr-text-muted: #a1a1aa;
+  --kr-border: #27272a;
+  --kr-accent-primary: #10b981;
+  --kr-accent-secondary: #f43f5e;
+  --kr-glow-primary: rgba(16, 185, 129, 0.22);
+  --kr-glow-secondary: rgba(244, 63, 94, 0.2);
+}
+
+.kr-theme-clash {
+  /* Wide at bottom, pinches toward top — thin color, sharp inner fade */
+  --kr-wedge-strength: 10%;
+  --kr-wedge-fade: 10%;
+  /* narrower tile = sharper “V” toward top center */
+  --kr-wedge-width: 100%;
+  /* Bottom-anchored tile height — higher = wedge reaches farther up */
+  --kr-wedge-height: 200%;
+  background-color: var(--kr-bg-to);
+  background-image:
+    /* grain */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.06'/%3E%3C/svg%3E"),
+    /* micro glow on the bottom corners only */
+    linear-gradient(to top left, var(--kr-glow-secondary) 0%, transparent 32%),
+    linear-gradient(to top right, var(--kr-glow-primary) 0%, transparent 32%),
+    /* secondary: strongest bottom-right → tapers up-left */
+    linear-gradient(
+        to top left,
+        color-mix(
+            in srgb,
+            var(--kr-accent-secondary) var(--kr-wedge-strength),
+            transparent
+          )
+          0%,
+        transparent var(--kr-wedge-fade)
+      ),
+    /* primary: strongest bottom-left → tapers up-right */
+    linear-gradient(
+        to top right,
+        color-mix(
+            in srgb,
+            var(--kr-accent-primary) var(--kr-wedge-strength),
+            transparent
+          )
+          0%,
+        transparent var(--kr-wedge-fade)
+      ),
+    linear-gradient(180deg, var(--kr-bg-from) 0%, var(--kr-bg-to) 100%);
+  background-position:
+    0 0,
+    right bottom,
+    left bottom,
+    right bottom,
+    left bottom,
+    0 0;
+  background-size:
+    180px 180px,
+    var(--kr-wedge-width) var(--kr-wedge-height),
+    var(--kr-wedge-width) var(--kr-wedge-height),
+    var(--kr-wedge-width) var(--kr-wedge-height),
+    var(--kr-wedge-width) var(--kr-wedge-height),
+    100% 100%;
+  background-repeat:
+    repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+}

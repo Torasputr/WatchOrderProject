@@ -9,6 +9,7 @@ import {
   type ThemeId,
 } from "../shared/config/theme";
 import { Route, Routes } from "react-router-dom";
+import SeriesDetailPage from "../features/home/pages/SeriesDetailPage";
 import SeriesPage from "../features/home/pages/SeriesPage";
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
             />
           }
         />
+        <Route path="/series/:seriesName" element={<SeriesDetailPage />} />
       </Routes>
     </div>
   );

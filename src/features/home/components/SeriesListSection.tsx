@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "../../../shared/config/firebase";
 
@@ -10,9 +11,8 @@ type FirestoreSeriesDoc = {
   synopsis?: string;
   posterurl?: string;
   logourl?: string;
-  rider?: string;
+  bgurl?: string;
   driver?: string;
-  motif?: string;
 };
 
 type SeriesItem = {
@@ -23,9 +23,8 @@ type SeriesItem = {
   synopsis?: string;
   posterurl?: string;
   logourl?: string;
-  rider?: string;
+  bgurl?: string;
   driver?: string;
-  motif?: string;
 };
 
 const ERAS: Era[] = ["showa", "heisei", "neo-heisei", "reiwa"];
@@ -56,6 +55,16 @@ export default function SeriesListSection({
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSynopsisExpanded, setIsSynopsisExpanded] = useState(false);
+  const [isRosterDragging, setIsRosterDragging] = useState(false);
+  const rosterScrollRef = useRef<HTMLDivElement | null>(null);
+  const rosterDragMovedRef = useRef(false);
+  const rosterPointerIdRef = useRef<number | null>(null);
+  const rosterStartXRef = useRef(0);
+  const rosterStartScrollLeftRef = useRef(0);
+  const rosterWindowDragActiveRef = useRef(false);
+  const suppressRosterClickRef = useRef(false);
+
+  const DRAG_THRESHOLD_PX = 8;
 
   useEffect(() => {
     async function loadAllSeries() {
@@ -86,9 +95,8 @@ export default function SeriesListSection({
                 synopsis: data.synopsis,
                 posterurl: data.posterurl,
                 logourl: data.logourl,
-                rider: data.rider,
+                bgurl: data.bgurl,
                 driver: data.driver,
-                motif: data.motif,
               } satisfies SeriesItem;
             });
           })
@@ -136,6 +144,117 @@ export default function SeriesListSection({
       ? synopsis
       : `${synopsis.slice(0, 260).trimEnd()}...`;
 
+  const endRosterWindowDrag = () => {
+    if (!rosterWindowDragActiveRef.current) return;
+    rosterWindowDragActiveRef.current = false;
+    rosterPointerIdRef.current = null;
+    setIsRosterDragging(false);
+  };
+
+  const handleRosterPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    const node = rosterScrollRef.current;
+    if (!node) return;
+    if (node.scrollWidth <= node.clientWidth) return;
+    if (event.button !== 0) return;
+    if (rosterWindowDragActiveRef.current) return;
+
+    rosterWindowDragActiveRef.current = true;
+    rosterPointerIdRef.current = event.pointerId;
+    rosterDragMovedRef.current = false;
+    rosterStartXRef.current = event.clientX;
+    rosterStartScrollLeftRef.current = node.scrollLeft;
+
+    const onWindowPointerMove = (e: PointerEvent) => {
+      if (rosterPointerIdRef.current !== e.pointerId) return;
+      const scrollEl = rosterScrollRef.current;
+      if (!scrollEl) return;
+
+      const delta = e.clientX - rosterStartXRef.current;
+      if (Math.abs(delta) > DRAG_THRESHOLD_PX) {
+        rosterDragMovedRef.current = true;
+        setIsRosterDragging(true);
+        e.preventDefault();
+      }
+      if (rosterDragMovedRef.current) {
+        scrollEl.scrollLeft = rosterStartScrollLeftRef.current - delta;
+      }
+    };
+
+    const onWindowPointerUp = (e: PointerEvent) => {
+      if (rosterPointerIdRef.current !== e.pointerId) return;
+      window.removeEventListener("pointermove", onWindowPointerMove);
+      window.removeEventListener("pointerup", onWindowPointerUp);
+      window.removeEventListener("pointercancel", onWindowPointerUp);
+
+      if (rosterDragMovedRef.current) {
+        suppressRosterClickRef.current = true;
+      }
+      rosterDragMovedRef.current = false;
+      endRosterWindowDrag();
+    };
+
+    window.addEventListener("pointermove", onWindowPointerMove, { passive: false });
+    window.addEventListener("pointerup", onWindowPointerUp);
+    window.addEventListener("pointercancel", onWindowPointerUp);
+  };
+
+  const handleRosterClickCapture = (
+    event: React.MouseEvent<HTMLDivElement>
+  ) => {
+    if (!suppressRosterClickRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressRosterClickRef.current = false;
+  };
+
+  const preventNativeDrag = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  };
+
+  const moveSelectedBy = (step: number) => {
+    if (!items.length) return;
+
+    const currentIndex = selectedId
+      ? items.findIndex((item) => item.id === selectedId)
+      : 0;
+    const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = Math.min(
+      items.length - 1,
+      Math.max(0, safeCurrentIndex + step)
+    );
+    const nextItem = items[nextIndex];
+    if (!nextItem) return;
+
+    setSelectedId(nextItem.id);
+    onSeriesThemeChange(getThemeIdFromName(nextItem.name));
+
+    const rosterNode = rosterScrollRef.current;
+    const targetNode = rosterNode?.querySelector<HTMLButtonElement>(
+      `[data-series-id="${nextItem.id}"]`
+    );
+    targetNode?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  };
+
+  const handleRosterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      moveSelectedBy(1);
+      return;
+    }
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      moveSelectedBy(-1);
+      return;
+    }
+  };
+
   if (loading) {
     return (
       <section className="mx-auto w-full max-w-[1300px] px-4 pb-8 md:px-8">
@@ -158,39 +277,58 @@ export default function SeriesListSection({
 
   return (
     <section className="mx-auto w-full max-w-[1300px] px-4 pb-10 md:px-8 text-[var(--kr-text-primary)]">
-      <div className="relative overflow-hidden rounded-2xl border border-[var(--kr-border)] bg-[var(--kr-bg-to)] p-3 shadow-[0_0_26px_var(--kr-glow-primary)] md:p-5">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,var(--kr-glow-primary),transparent_40%),radial-gradient(circle_at_80%_70%,var(--kr-glow-secondary),transparent_40%)] opacity-40" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,transparent,var(--kr-accent-primary),transparent)] opacity-80" />
+      <div className="relative overflow-hidden rounded-2xl border border-[var(--kr-border)] bg-[var(--kr-bg-to)] shadow-[0_0_26px_var(--kr-glow-primary)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,var(--kr-glow-primary),transparent_45%),radial-gradient(circle_at_80%_70%,var(--kr-glow-secondary),transparent_45%)] opacity-40" />
+        <div className="pointer-events-none absolute inset-0 bg-black/25" />
+        {selected?.bgurl || selected?.posterurl ? (
+          <img
+            key={selected.id}
+            src={selected.bgurl ?? selected.posterurl}
+            alt={selected.name}
+            className="absolute inset-0 h-full w-full object-cover object-center opacity-30 transition-all duration-300"
+          />
+        ) : null}
 
-        <div className="relative grid items-start gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          {/* LEFT: big poster */}
-          <div className="relative h-[460px] max-h-[78vh] overflow-hidden rounded-xl border border-[var(--kr-border)] bg-[linear-gradient(145deg,var(--kr-panel-from),var(--kr-panel-to))] shadow-[0_0_24px_var(--kr-glow-secondary)] md:h-[540px] lg:h-[620px]">
-            <div className="pointer-events-none absolute left-1/2 top-[42%] h-[70%] w-[70%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,var(--kr-glow-primary)_0%,transparent_70%)] opacity-75" />
-            {selected?.posterurl ? (
-              <img
-                key={selected?.id}
-                src={selected.posterurl}
-                alt={selected.name}
-                className="h-full w-full object-contain object-center p-3 opacity-95 transition-all duration-300"
-              />
-            ) : (
-              <div className="h-full w-full bg-[radial-gradient(circle_at_30%_20%,var(--kr-glow-primary),transparent_45%),linear-gradient(145deg,var(--kr-panel-from),var(--kr-panel-to))]" />
-            )}
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-
-            <div className="absolute left-4 top-4 rounded-md border border-[var(--kr-border)] bg-black/35 px-2 py-1 text-[10px] font-bold tracking-wider">
-              TOKUWATCH SELECT
-            </div>
-
-            <div className="absolute bottom-4 left-4 right-4 rounded-lg bg-black/25 p-3 backdrop-blur-[1px]">
-              <p className="text-xs uppercase tracking-[0.2em] text-[var(--kr-text-muted)]">
-                {selected?.era ?? "-"}
+        <div className="relative p-4 md:p-6">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--kr-text-muted)]">
+                Kamen Rider Selection
               </p>
-              <h2 className="text-3xl font-extrabold md:text-4xl">
+              <h2 className="mt-1 text-3xl font-black tracking-tight md:text-5xl">
                 {selected?.name ?? "No Series"}
               </h2>
-              <p className="text-justify mt-2 max-w-2xl text-sm leading-relaxed text-[var(--kr-text-muted)]">
+              <p className="mt-1 text-xs uppercase tracking-[0.3em] text-[var(--kr-accent-primary)]">
+                Era {selected?.era ?? "-"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-[var(--kr-border)] bg-black/35 px-3 py-2 text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--kr-text-muted)]">
+                Now Selecting
+              </p>
+              <p className="mt-1 text-xl font-bold">{selected?.name ?? "-"}</p>
+            </div>
+          </div>
+
+          <div className="grid items-end gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="relative h-[420px] overflow-hidden rounded-xl border border-[var(--kr-border)] bg-[linear-gradient(145deg,var(--kr-panel-from),var(--kr-panel-to))] md:h-[500px]">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,var(--kr-glow-primary),transparent_55%)] opacity-70" />
+              {selected?.posterurl ? (
+                <img
+                  key={selected?.id}
+                  src={selected.posterurl}
+                  alt={selected.name}
+                  className="h-full w-full object-contain object-center p-3 opacity-95 transition-all duration-300"
+                />
+              ) : (
+                <div className="h-full w-full bg-[radial-gradient(circle_at_30%_20%,var(--kr-glow-primary),transparent_45%),linear-gradient(145deg,var(--kr-panel-from),var(--kr-panel-to))]" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+            </div>
+
+            <div className="rounded-xl border border-[var(--kr-border)] bg-black/45 p-4 backdrop-blur-sm">
+              <p className="text-justify text-sm leading-relaxed text-[var(--kr-text-muted)]">
                 {visibleSynopsis || "Select a series to display details."}
               </p>
               {synopsisNeedsTruncate ? (
@@ -202,11 +340,27 @@ export default function SeriesListSection({
                   {isSynopsisExpanded ? "Show less" : "Read more"}
                 </button>
               ) : null}
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <MetaTile label="Driver" value={selected?.driver ?? "-"} />
+                <MetaTile
+                  label="Year"
+                  value={selected?.year ? String(selected.year) : "-"}
+                  accent
+                />
+                {selected?.id ? (
+                  <Link
+                    to={`/series/${encodeURIComponent(selected.name)}`}
+                    className="inline-flex w-full items-center justify-center rounded-xl border-2 border-[var(--kr-accent-primary)] bg-[var(--kr-accent-primary)] px-4 py-2.5 text-sm font-bold text-[var(--kr-bg-to)] transition-all duration-300 hover:bg-[var(--kr-bg-to)] hover:text-[var(--kr-accent-primary)] sm:col-span-2"
+                  >
+                    Detail
+                  </Link>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          {/* RIGHT: roster cards with logo */}
-          <div className="rounded-xl border border-[var(--kr-border)] bg-[linear-gradient(145deg,var(--kr-panel-from),var(--kr-panel-to))] p-4 shadow-[inset_0_0_0_1px_var(--kr-glow-secondary)]">
+          <div className="mt-5 rounded-xl border border-[var(--kr-border)] bg-[color-mix(in_srgb,var(--kr-panel-to)_90%,black)] p-3">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-bold tracking-wider text-[var(--kr-text-muted)]">
                 SERIES ROSTER
@@ -214,7 +368,16 @@ export default function SeriesListSection({
               <p className="text-xs text-[var(--kr-text-muted)]">{items.length} entries</p>
             </div>
 
-            <div className="hide-scrollbar grid max-h-[420px] grid-cols-2 gap-3 overflow-y-auto pr-2 pb-1 sm:grid-cols-2 xl:grid-cols-3">
+            <div
+              ref={rosterScrollRef}
+              onPointerDown={handleRosterPointerDown}
+              onKeyDown={handleRosterKeyDown}
+              onClickCapture={handleRosterClickCapture}
+              onDragStart={preventNativeDrag}
+              tabIndex={0}
+              className={`hide-scrollbar flex select-none gap-3 overflow-x-auto pb-1 ${isRosterDragging ? "cursor-grabbing" : "cursor-grab"}`}
+              style={{ touchAction: "pan-y" }}
+            >
               {items.map((item) => {
                 const active = item.id === selected?.id;
                 const cardImage = item.logourl ?? item.posterurl;
@@ -223,15 +386,16 @@ export default function SeriesListSection({
                   <button
                     key={item.id}
                     type="button"
+                    data-series-id={item.id}
                     onClick={() => {
                       setSelectedId(item.id);
                       onSeriesThemeChange(getThemeIdFromName(item.name));
                     }}
                     className={[
-                      "group relative overflow-hidden rounded-lg border p-1.5 text-left transition-all duration-200",
+                      "group relative w-[180px] shrink-0 overflow-hidden rounded-lg border p-2 text-left transition-all duration-200",
                       active
                         ? "border-[var(--kr-accent-primary)] bg-[color-mix(in_srgb,var(--kr-accent-primary)_8%,transparent)] ring-1 ring-[var(--kr-accent-primary)]/70 shadow-[0_0_14px_var(--kr-glow-primary)]"
-                        : "border-[var(--kr-border)] hover:-translate-y-0.5 hover:border-[var(--kr-accent-primary)]/60",
+                        : "border-[var(--kr-border)] bg-[var(--kr-panel-to)]/70 hover:border-[var(--kr-accent-primary)]/60 hover:shadow-[0_0_0_1px_var(--kr-glow-primary)]",
                     ].join(" ")}
                   >
                     <div className="aspect-[16/9] w-full rounded bg-[linear-gradient(145deg,var(--kr-panel-to),#05070b)]">
@@ -239,6 +403,7 @@ export default function SeriesListSection({
                         <img
                           src={cardImage}
                           alt={`${item.name} logo`}
+                          draggable={false}
                           className="h-full w-full object-contain p-2"
                         />
                       ) : (
@@ -246,7 +411,7 @@ export default function SeriesListSection({
                       )}
                     </div>
 
-                    <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wide text-[var(--kr-text-primary)]">
+                    <p className="mt-2 truncate text-xs font-semibold uppercase tracking-wide text-[var(--kr-text-primary)]">
                       {item.name}
                     </p>
 
@@ -260,13 +425,6 @@ export default function SeriesListSection({
               })}
             </div>
           </div>
-        </div>
-
-        <div className="relative mt-4 grid gap-2 rounded-xl border border-[var(--kr-border)] bg-[var(--kr-panel-to)] p-3 shadow-[inset_0_0_0_1px_var(--kr-glow-primary)] md:grid-cols-4">
-          <MetaTile label="Main Rider" value={selected?.rider ?? "-"} />
-          <MetaTile label="Driver" value={selected?.driver ?? "-"} />
-          <MetaTile label="Motif" value={selected?.motif ?? "-"} />
-          <MetaTile label="Year" value={selected?.year ? String(selected.year) : "-"} accent />
         </div>
       </div>
     </section>

@@ -2,6 +2,31 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Firebase setup (Firestore)
+
+1. Create a Firebase project in the [Firebase Console](https://console.firebase.google.com/).
+2. Enable `Firestore Database` (start in test mode for local development).
+3. In Firebase project settings, register a Web App and copy the config values.
+4. Copy `.env.example` to `.env` and fill in all `VITE_FIREBASE_*` values.
+5. Run the app with `npm run dev`.
+
+### Existing Firebase base
+
+- Firebase config is in `src/shared/config/firebase.ts`.
+- Firestore instance is exported as `db`.
+
+Usage example:
+
+```ts
+import { addDoc, collection } from 'firebase/firestore'
+import { db } from './shared/config/firebase'
+
+await addDoc(collection(db, 'users'), {
+  name: 'Toku User',
+  createdAt: new Date(),
+})
+```
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)

@@ -8,6 +8,8 @@ import {
   themes,
   type ThemeId,
 } from "../shared/config/theme";
+import { Route, Routes } from "react-router-dom";
+import SeriesPage from "../features/home/pages/SeriesPage";
 
 export default function App() {
   const [themeId, setThemeId] = useState<ThemeId>(() => {
@@ -23,7 +25,21 @@ export default function App() {
   return (
     <div className="flex min-h-dvh flex-col">
       <Navbar themeId={themeId} onThemeChange={setThemeId} />
-      <HomePage />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/series"
+          element={
+            <SeriesPage
+              onSeriesThemeChange={(nextThemeId) => {
+                if (nextThemeId && nextThemeId in themes) {
+                  setThemeId(nextThemeId as ThemeId);
+                }
+              }}
+            />
+          }
+        />
+      </Routes>
     </div>
   );
 }

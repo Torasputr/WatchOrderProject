@@ -18,7 +18,11 @@ export default function HeroSection() {
             and specials.
           </h2>
           <div className="mt-10 w-full">
-            <ButtonLink href="/" variant="primary" children="Start Watchlist" />
+            <ButtonLink
+              href="/series"
+              variant="primary"
+              children="Series List"
+            />
           </div>
         </div>
 

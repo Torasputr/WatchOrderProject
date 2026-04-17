@@ -73,3 +73,12 @@ html {
   background-repeat:
     repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
 }
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
+import { db } from "../../../shared/config/firebase";
 
 type WatchItemType = "main" | "movie" | "special" | "crossover";
-type WatchMode = "main" | "full" | "no-crossover";
 
 type WatchArc = {
   id: string;
@@ -12,6 +13,7 @@ type WatchArc = {
 type WatchItem = {
   id: string;
   arcId: string;
+  arcLabel?: string;
   order: number;
   episode: string;
   title: string;
@@ -20,25 +22,16 @@ type WatchItem = {
   optional?: boolean;
 };
 
-const WATCH_ARCS: WatchArc[] = [
-  { id: "intro", label: "Arc 1 - Opening", note: "Setup dunia dan konflik awal." },
-  { id: "middle", label: "Arc 2 - Mid Story", note: "Power-up, konflik inti, dan turning point." },
-  { id: "final", label: "Arc 3 - Endgame", note: "Klimaks, ending, dan penutup timeline." },
-];
+const ARC_META: Record<string, Omit<WatchArc, "id">> = {
+  intro: { label: "Arc 1 - Opening", note: "Setup dunia dan konflik awal." },
+  middle: {
+    label: "Arc 2 - Mid Story",
+    note: "Power-up, konflik inti, dan turning point.",
+  },
+  final: { label: "Arc 3 - Endgame", note: "Klimaks, ending, dan penutup timeline." },
+};
 
-const WATCH_ORDER_DUMMY: WatchItem[] = [
-  { id: "ep-01", arcId: "intro", order: 1, episode: "EP 01", title: "Wake Up Call", type: "main", note: "Episode pembuka." },
-  { id: "ep-02", arcId: "intro", order: 2, episode: "EP 02", title: "First Encounter", type: "main", note: "Kenalan rider & rival." },
-  { id: "ep-03", arcId: "intro", order: 3, episode: "EP 03", title: "Rising Threat", type: "main", note: "Ancaman mulai naik." },
-  { id: "mv-01", arcId: "intro", order: 4, episode: "MOVIE", title: "Episode Zero", type: "movie", note: "Disarankan setelah EP 03." },
-  { id: "ep-04", arcId: "middle", order: 5, episode: "EP 04", title: "Mid Arc Start", type: "main", note: "Masuk arc tengah." },
-  { id: "ep-05", arcId: "middle", order: 6, episode: "EP 05", title: "Dual Conflict", type: "main", note: "Front lawan makin luas." },
-  { id: "cv-01", arcId: "middle", order: 7, episode: "CROSS", title: "Crossover Stage", type: "crossover", note: "Opsional untuk konteks rider lain.", optional: true },
-  { id: "ep-06", arcId: "middle", order: 8, episode: "EP 06", title: "Core Revelation", type: "main", note: "Reveal lore utama." },
-  { id: "ep-07", arcId: "final", order: 9, episode: "EP 07", title: "Final Build-Up", type: "main", note: "Persiapan endgame." },
-  { id: "ep-08", arcId: "final", order: 10, episode: "EP 08", title: "Final Battle", type: "main", note: "Klimaks pertarungan." },
-  { id: "sp-01", arcId: "final", order: 11, episode: "SPECIAL", title: "After Story", type: "special", note: "Epilog setelah ending.", optional: true },
-];
+const ERAS = ["reiwa", "neo-heisei", "heisei", "showa"] as const;
 
 function getTypeClass(type: WatchItemType) {
   if (type === "main") return "border-[var(--kr-accent-primary)]/40 bg-[color-mix(in_srgb,var(--kr-accent-primary)_14%,transparent)] text-[var(--kr-accent-primary)]";
@@ -48,17 +41,120 @@ function getTypeClass(type: WatchItemType) {
 }
 
 export function WatchOrderBoard({ seriesName }: { seriesName: string }) {
-  const [mode, setMode] = useState<WatchMode>("main");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [allItems, setAllItems] = useState<WatchItem[]>([]);
   const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set());
   const [openArcIds, setOpenArcIds] = useState<Set<string>>(new Set(["intro"]));
 
-  const visibleItems = useMemo(() => {
-    return WATCH_ORDER_DUMMY.filter((item) => {
-      if (mode === "main") return item.type === "main";
-      if (mode === "no-crossover") return item.type !== "crossover";
-      return true;
-    });
-  }, [mode]);
+  useEffect(() => {
+    async function loadWatchOrder() {
+      const normalizedName = seriesName.trim();
+      if (!normalizedName) {
+        setAllItems([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        let foundSeries: { era: (typeof ERAS)[number]; id: string } | null = null;
+
+        for (const era of ERAS) {
+          const seriesRef = collection(
+            db,
+            "tokusatsu",
+            "kamenrider",
+            "era",
+            era,
+            "series"
+          );
+          const seriesQuery = query(
+            seriesRef,
+            where("name", "==", normalizedName),
+            limit(1)
+          );
+          const seriesSnap = await getDocs(seriesQuery);
+          if (!seriesSnap.empty) {
+            foundSeries = { era, id: seriesSnap.docs[0].id };
+            break;
+          }
+
+          // Fallback for case-mismatch data (e.g. "Zeztz" vs "ZEZTZ")
+          const looseSeriesSnap = await getDocs(seriesRef);
+          const looseMatch = looseSeriesSnap.docs.find(
+            (docSnap) =>
+              String(docSnap.data().name ?? "").trim().toLowerCase() ===
+              normalizedName.toLowerCase()
+          );
+          if (looseMatch) {
+            foundSeries = { era, id: looseMatch.id };
+            break;
+          }
+        }
+
+        if (!foundSeries) {
+          setAllItems([]);
+          return;
+        }
+
+        const watchRef = collection(
+          db,
+          "tokusatsu",
+          "kamenrider",
+          "era",
+          foundSeries.era,
+          "series",
+          foundSeries.id,
+          "watchorder"
+        );
+        const watchSnap = await getDocs(watchRef);
+
+        const parsed = watchSnap.docs
+          .map((docSnap) => {
+            const data = docSnap.data() as Partial<WatchItem> & {
+              type?: string;
+            };
+            const safeType: WatchItemType =
+              data.type === "movie" ||
+              data.type === "special" ||
+              data.type === "crossover" ||
+              data.type === "main"
+                ? data.type
+                : "main";
+
+            return {
+              id: docSnap.id,
+              arcId: data.arcId ?? "misc",
+              arcLabel: data.arcLabel,
+              order: data.order ?? Number.MAX_SAFE_INTEGER,
+              episode: data.episode ?? docSnap.id,
+              title: data.title ?? "Untitled entry",
+              type: safeType,
+              note: data.note ?? "",
+              optional: Boolean(data.optional),
+            } satisfies WatchItem;
+          })
+          .sort((a, b) => a.order - b.order);
+
+        setAllItems(parsed);
+      } catch (loadError) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Failed to load watch order data."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadWatchOrder();
+  }, [seriesName]);
+
+  const visibleItems = useMemo(() => allItems, [allItems]);
 
   const progress = useMemo(() => {
     if (visibleItems.length === 0) return { watched: 0, total: 0, percent: 0 };
@@ -75,13 +171,36 @@ export function WatchOrderBoard({ seriesName }: { seriesName: string }) {
   }, [visibleItems, watchedIds]);
 
   const itemsByArc = useMemo(() => {
-    return WATCH_ARCS.map((arc) => ({
-      ...arc,
-      items: visibleItems
-        .filter((item) => item.arcId === arc.id)
-        .sort((a, b) => a.order - b.order),
-    }));
+    const grouped = new Map<string, WatchItem[]>();
+    for (const item of visibleItems) {
+      const current = grouped.get(item.arcId) ?? [];
+      current.push(item);
+      grouped.set(item.arcId, current);
+    }
+
+    return Array.from(grouped.entries()).map(([arcId, items]) => {
+      const preset = ARC_META[arcId];
+      const fallbackLabel = items[0]?.arcLabel ?? `Arc - ${arcId}`;
+      return {
+        id: arcId,
+        label: preset?.label ?? fallbackLabel,
+        note: preset?.note ?? "Episode group.",
+        items: [...items].sort((a, b) => a.order - b.order),
+      };
+    });
   }, [visibleItems]);
+
+  useEffect(() => {
+    if (itemsByArc.length === 0) {
+      setOpenArcIds(new Set());
+      return;
+    }
+
+    setOpenArcIds((prev) => {
+      if (prev.size > 0) return prev;
+      return new Set([itemsByArc[0].id]);
+    });
+  }, [itemsByArc]);
 
   const toggleWatched = (id: string) => {
     setWatchedIds((prev) => {
@@ -100,6 +219,23 @@ export function WatchOrderBoard({ seriesName }: { seriesName: string }) {
       return next;
     });
   };
+
+  if (loading) {
+    return (
+      <section className="mx-auto mt-5 w-full max-w-[1200px] rounded-2xl border border-[var(--kr-border)] bg-[color-mix(in_srgb,var(--kr-panel-to)_86%,black)] p-4 text-[var(--kr-text-primary)] md:p-5">
+        <p className="text-sm text-[var(--kr-text-muted)]">Loading watch order...</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="mx-auto mt-5 w-full max-w-[1200px] rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-red-200 md:p-5">
+        <p className="text-sm font-semibold">Failed to load watch order data.</p>
+        <p className="mt-1 text-xs opacity-80">{error}</p>
+      </section>
+    );
+  }
 
   return (
     <section className="mx-auto mt-5 w-full max-w-[1200px] rounded-2xl border border-[var(--kr-border)] bg-[color-mix(in_srgb,var(--kr-panel-to)_86%,black)] p-4 text-[var(--kr-text-primary)] md:p-5">
@@ -129,36 +265,19 @@ export function WatchOrderBoard({ seriesName }: { seriesName: string }) {
             Next to watch
           </p>
           <p className="mt-1 text-sm font-semibold">
-            {nextItem ? `${nextItem.episode} - ${nextItem.title}` : "All done in this mode."}
+            {nextItem ? `${nextItem.episode} - ${nextItem.title}` : "All done."}
           </p>
-        </div>
-
-        <div className="inline-flex rounded-lg border border-[var(--kr-border)] bg-black/25 p-1 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setMode("main")}
-            className={`rounded-md px-3 py-1.5 ${mode === "main" ? "bg-[var(--kr-accent-primary)] text-[var(--kr-bg-to)]" : "text-[var(--kr-text-muted)]"}`}
-          >
-            Main Only
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("full")}
-            className={`rounded-md px-3 py-1.5 ${mode === "full" ? "bg-[var(--kr-accent-primary)] text-[var(--kr-bg-to)]" : "text-[var(--kr-text-muted)]"}`}
-          >
-            Full
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("no-crossover")}
-            className={`rounded-md px-3 py-1.5 ${mode === "no-crossover" ? "bg-[var(--kr-accent-primary)] text-[var(--kr-bg-to)]" : "text-[var(--kr-text-muted)]"}`}
-          >
-            No Crossover
-          </button>
         </div>
       </div>
 
       <div className="space-y-3">
+        {itemsByArc.length === 0 ? (
+          <article className="rounded-xl border border-[var(--kr-border)] bg-black/25 p-4">
+            <p className="text-sm text-[var(--kr-text-muted)]">
+              Belum ada data watch order untuk series ini.
+            </p>
+          </article>
+        ) : null}
         {itemsByArc.map((arc) => (
           <article
             key={arc.id}
@@ -183,7 +302,7 @@ export function WatchOrderBoard({ seriesName }: { seriesName: string }) {
               <div className="space-y-2 border-t border-[var(--kr-border)] px-3 pb-3 pt-2 md:px-4">
                 {arc.items.length === 0 ? (
                   <p className="py-2 text-sm text-[var(--kr-text-muted)]">
-                    Tidak ada entry di mode ini.
+                    Tidak ada entry.
                   </p>
                 ) : (
                   arc.items.map((item) => (

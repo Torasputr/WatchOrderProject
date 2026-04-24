@@ -285,12 +285,12 @@ export default function SeriesListSection({
             key={selected.id}
             src={selected.bgurl ?? selected.posterurl}
             alt={selected.name}
-            className="absolute inset-0 h-full w-full object-cover object-center opacity-30 transition-all duration-300"
+            className="kr-fade-scale-in absolute inset-0 h-full w-full object-cover object-center opacity-30 transition-all duration-300"
           />
         ) : null}
 
         <div className="relative p-4 md:p-6">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div key={selected?.id} className="kr-fade-up-in mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--kr-text-muted)]">
                 Kamen Rider Selection
@@ -319,7 +319,7 @@ export default function SeriesListSection({
                   key={selected?.id}
                   src={selected.posterurl}
                   alt={selected.name}
-                  className="h-full w-full object-contain object-center p-3 opacity-95 transition-all duration-300"
+                  className="kr-fade-scale-in h-full w-full object-contain object-center p-3 opacity-95 transition-all duration-300"
                 />
               ) : (
                 <div className="h-full w-full bg-[radial-gradient(circle_at_30%_20%,var(--kr-glow-primary),transparent_45%),linear-gradient(145deg,var(--kr-panel-from),var(--kr-panel-to))]" />
@@ -327,7 +327,7 @@ export default function SeriesListSection({
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
             </div>
 
-            <div className="rounded-xl border border-[var(--kr-border)] bg-black/45 p-4 backdrop-blur-sm">
+            <div key={selected?.id} className="kr-fade-up-in rounded-xl border border-[var(--kr-border)] bg-black/45 p-4 backdrop-blur-sm">
               <p className="text-justify text-sm leading-relaxed text-[var(--kr-text-muted)]">
                 {visibleSynopsis || "Select a series to display details."}
               </p>

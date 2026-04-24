@@ -82,3 +82,71 @@ html {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+@keyframes krFadeScaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes krFadeUpIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.kr-fade-scale-in {
+  animation: krFadeScaleIn 280ms ease-out both;
+}
+
+.kr-fade-up-in {
+  animation: krFadeUpIn 260ms ease-out both;
+}
+
+.kr-arc-collapse {
+  overflow: hidden;
+  transition:
+    max-height 280ms ease,
+    opacity 240ms ease,
+    transform 240ms ease,
+    padding-top 240ms ease,
+    padding-bottom 240ms ease;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.kr-arc-collapse.open {
+  max-height: 1400px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes krCheckPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--kr-accent-primary) 55%, transparent);
+  }
+  45% {
+    transform: scale(1.01);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--kr-accent-primary) 0%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--kr-accent-primary) 0%, transparent);
+  }
+}
+
+.kr-check-pulse {
+  animation: krCheckPulse 360ms ease-out both;
+}
